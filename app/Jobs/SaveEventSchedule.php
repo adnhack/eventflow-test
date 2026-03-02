@@ -8,6 +8,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Models\EventSchedule;
+use Illuminate\Support\Facades\Log;
 
 class SaveEventSchedule implements ShouldQueue
 {
@@ -43,9 +44,10 @@ class SaveEventSchedule implements ShouldQueue
      */
     public function handle(): void
     {
+        $selected_date = $this->payload['date'] ?? date('Y-m-d');
         EventSchedule::create( [
             'event_id' => $this->event_id,
-            'date' => date('Y-m-d', strtotime($this->payload['date'])),
+            'event_date' => date('Y-m-d', strtotime($selected_date)),
             'start_time' => $this->payload['start_time'],
             'end_time' => $this->payload['end_time']
         ]);

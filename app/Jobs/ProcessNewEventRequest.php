@@ -10,6 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use App\Jobs\SaveEnrichmentDataJob;
 use App\Models\Event;
 use App\Models\EventInformation;
+use Illuminate\Support\Facades\Log;
 
 class ProcessNewEventRequest implements ShouldQueue
 {
@@ -27,36 +28,39 @@ class ProcessNewEventRequest implements ShouldQueue
      * @var int
      */
     public $retryAfter = 60;
-
     private $payload;
+    public $score;
 
     /**
      * Create a new job instance.
      */
-    public function __construct( $payload )
+    public function __construct( $payload, $score )
     {
         $this->payload = $payload;
+        $this->score = $score;
     }
 
     /**
      * Execute the job.
      */
-    public function handle( $payload ): void
+    public function handle(): void
     {
+        Log::info('Job started.');
+
         $event = new Event;
-        $event->eventname = $payload['eventname'];
+        $event->eventname = $this->payload['eventname'];
         $event->save();
-        $event_id = $event->id;
+        $event_id = $event->event_id;
 
         EventInformation::create( [
             'event_id' => $event_id,
-            'description' => $payload['description'],
-            'additional_info' => $payload['additional_info'] ?? ''
+            'description' => $this->payload['description'],
+            'additional_info' => $this->payload['additional_info'] ?? ''
         ]);
 
-        SaveEventLocation::dispatch( $payload, $event_id );
-        SaveEventPrice::dispatch( $payload, $event_id );
-        SaveEventSchedule::dispatch( $payload, $event_id );
-        SaveEnrichmentDataJob::dispatch( $event_id );
+        SaveEventLocation::dispatch( $this->payload, $event_id )->onQueue($this->score);
+        SaveEventPrice::dispatch( $this->payload, $event_id )->onQueue($this->score);
+        SaveEventSchedule::dispatch( $this->payload, $event_id )->onQueue($this->score);
+        SaveEnrichmentDataJob::dispatch( $event_id )->onQueue($this->score);
     }
 }

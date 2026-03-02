@@ -14,16 +14,15 @@ class EventController extends Controller
 {
     public function handler(Request $request, $source)
     {
-        //php artisan queue:work --queue=high,low,default --sleep=3 --tries=3
         $payload = json_decode($request->getContent(), true);
         $validation_fail = self::validateFormat( $payload, $source );
         $normalized_data = DataNormalizerController::normalize( $payload['data'] );
         $normalized_data['validation'] = $validation_fail;
 
         if ( false === $validation_fail[0] ) {
-            ProcessInvalidEventRequest::dispatch( $normalized_data, $validation_fail[1] );
+            EventCreationDispatcher::dispatch( $normalized_data );    
         } else {
-            EventCreationDispatcher::dispatch( $normalized_data );
+            ProcessInvalidEventRequest::dispatch( $normalized_data, $validation_fail[1] );
         }
 
         // Return a response to acknowledge receipt of the webhook

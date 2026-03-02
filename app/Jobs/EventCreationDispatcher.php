@@ -9,6 +9,12 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Jobs\ProcessNewEventRequest;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use App\Models\Event;
+use App\Models\EventInformation;
+use App\Models\EventLocation;
+use App\Models\EventPrice;
+use App\Models\EventSchedule;
 
 use App\Models\EventRule;
 
@@ -79,8 +85,9 @@ class EventCreationDispatcher implements ShouldQueue
             }
             $score_result[] = $query->max('score');
         }
+
         $score = empty($score_result) ? 0 : max($score_result);
-        $queue = $score >= 70 ? 'high' : ( $score >= 30 ? 'medium' : 'low');
-        ProcessNewEventRequest::dispatch( $this->payload )->onQueue($queue);
+        $score = $score >= 70 ? 'high' : ( $score >= 30 ? 'medium' : 'low');
+        ProcessNewEventRequest::dispatch( $this->payload, $score )->onQueue($score);
     }
 }

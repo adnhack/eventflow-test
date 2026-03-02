@@ -8,6 +8,8 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 use App\Models\EventInformation;
 
@@ -48,12 +50,12 @@ class SaveEnrichmentDataJob implements ShouldQueue
      */
     public function handle(): void
     {
-        $payload['enriched_data'] = Http::retry(5, 100)->post('http://eventflow.local/api/enriched/data', [
+        $payload = Http::retry(5, 100)->post('http://eventflow.local/api/enriched/data', [
             'name' => 'system',
             'type' => 'getdata',
         ]);
-        $event_information = EventInformation::find($this->event_id);
-        $event_information->enriched_data = $event_information->enriched_data . $payload['enriched_data'];
-        $event_information->save();
+        $event_information = EventInformation::where('event_id', $this->event_id)->update([
+            'additional_info' => DB::raw("CONCAT(additional_info, ',', '" . json_encode($payload) . "')")
+        ]);
     }
 }
