@@ -3,8 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\EnrichmentController;
 
 Route::post('/webhooks/{source}', [ EventController::class, 'handler' ]);
-Route::post('/example', function () {
-    return response()->json(['message' => 'API route is working']);
-});
+Route::post('/enriched/data', [ EnrichmentController::class, 'getData' ]);

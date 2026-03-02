@@ -3,104 +3,91 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use App\Http\Controllers\DataNormalizerController;
+
+use App\Jobs\EventCreationDispatcher;
+use App\Jobs\ProcessNewEventRequest;
+use App\Jobs\ProcessInvalidEventRequest;
 
 class EventController extends Controller
 {
     public function handler(Request $request, $source)
     {
-        echo "hola mundop";
-        exit;
-        
-        $data = $request->all();
-        $global = [
-            'event' => [
-                'name' => '',
-                'location' => '',
-                'description' => '',
-            ],
-            'schedule' => [
-                'date' => '',
-                'start_time' => '',
-                'end_time' => '',
-            ],
-            'prices' => [
-                'reservation' => '',
-                'price' => '',
-            ],
-            'information' => [
-                'capacity' => '',
-                'additional_info' => '',
-            ]
-        ];
+        //php artisan queue:work --queue=high,low,default --sleep=3 --tries=3
+        $payload = json_decode($request->getContent(), true);
+        $validation_fail = self::validateFormat( $payload, $source );
+        $normalized_data = DataNormalizerController::normalize( $payload['data'] );
+        $normalized_data['validation'] = $validation_fail;
 
-        $event_mania = [
-            'event' => [
-                'name' => '',
-                'location' => '',
-                'date' => '',
-                'start_time' => '',
-                'end_time' => '',
-            ],
-            'tickets' => [
-                'reservation' => '',
-                'price' => '',
-                'capacity' => '',
-            ],
-            'information' => [
-                'description' => '',
-                'additional_info' => '',
-            ]
-        ];
-
-        $fast_event = [
-            'event' => [
-                'name' => '',
-                'date' => '',
-                'start_time' => '',
-                'end_time' => '',
-                'location' => '',
-                'description' => '',
-                'reservation' => '',
-                'price' => '',
-            ],
-        ];
-        
-        var_dump($data);
-        echo json_encode($global);
-        echo json_encode($event_mania);
-        echo json_encode($fast_event);
-        exit;
-
-        $is_valid = self::validateFormat( [ 'data' => $data, 'source' => $source ] );
-
-        if ( !$is_valid ) {
-            return response()->json(['message' => 'Invalid / Unsupported webhook format'], 400);
+        if ( false === $validation_fail[0] ) {
+            ProcessInvalidEventRequest::dispatch( $normalized_data, $validation_fail[1] );
+        } else {
+            EventCreationDispatcher::dispatch( $normalized_data );
         }
 
         // Return a response to acknowledge receipt of the webhook
-        return response()->json(['message' => 'Webhook received successfully'], 200);
+        return response()->json([
+            'message' => 'Webhook received successfully']
+        , 200);
     }
 
-    private static function validateFormat( $payload ) : bool
+    private static function validateFormat( $payload, $source ) : array
     {
-        switch( $payload['source'] ) {
+        switch( $source ) {
             case 'globalevents':
-                
+
+                $rule = [
+                    "event" => 'required','array',
+                    'event.eventname' => 'required','string',
+                    'event.location' => 'required','string',
+                    'event.description' => 'required','string',
+                    "schedule" => 'required','array',
+                    'schedule.date' => 'required','date',
+                    'schedule.start_time' => 'required','date_format:H:i',
+                    'schedule.end_time' => 'required','date_format:H:i',
+                    "prices" => 'required','array',
+                    'prices.reservation' => 'required','integer',
+                    "information" => 'required','array',
+                ];
                 break;
             case 'eventsmani':
-                
+                $rule = [
+                    "event" => 'required','array',
+                    'event.eventname' => 'required','string',
+                    'event.location' => 'required','string',
+                    'event.date' => 'required','date',
+                    'event.start_time' => 'required','date_format:H:i',
+                    'event.end_time' => 'required','date_format:H:i',
+                    "tickets" => 'required','array',
+                    'tickets.reservation' => 'required','integer',
+                    "information" => 'required','array',
+                    'information.description' => 'required','string',
+                ];
                 break;
             case 'fastevents':
-                
+                $rule = [
+                    "event" => 'required','array',
+                    'event.eventname' => 'required','string',
+                    'event.date' => 'required','date',
+                    'event.start_time' => 'required','date_format:H:i',
+                    'event.end_time' => 'required','date_format:H:i',
+                    'event.location' => 'required','string',
+                    'event.description' => 'required','string',
+                    'event.reservation' => 'required','integer',
+                ];
                 break;
             default:
-                return false; // Unsupported source
+                return [true, ['Unsupported source']];
         }
-        return true;
-    }
-
-    private static function formatData( $payload ) : array
-    {
-        return [];
+        try{
+            $validation_result = Validator::make( $payload['data'], $rule );
+        } catch( \Illuminate\Validation\ValidationException $e ) {
+            return [true, $e->errors()];
+        }
+        return [
+            $validation_result->fails(),
+            $validation_result->errors()->messages()
+        ];
     }
 }
